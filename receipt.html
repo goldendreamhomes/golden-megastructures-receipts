@@ -57,6 +57,7 @@
   }
   .pill.ok { background: rgba(72,187,120,.25); }
   .pill.bad { background: rgba(229,62,62,.3); }
+  .pill.warn { background: rgba(255,193,7,.35); }
   .btn {
     border: none;
     border-radius: 8px;
@@ -213,6 +214,20 @@
     display: none;
   }
   .setupBanner.show { display: block; }
+
+  .testBanner {
+    background: #fff8e1;
+    border: 1px solid #ffd54f;
+    color: #6b4d00;
+    padding: 10px 14px;
+    font-size: .82rem;
+    font-weight: 600;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    display: none;
+    text-align: center;
+  }
+  .testBanner.show { display: block; }
 </style>
 </head>
 <body>
@@ -227,6 +242,7 @@
   </div>
   <div class="actions">
     <span class="pill" id="syncPill">Connecting…</span>
+    <span class="pill warn hidden" id="testModePill">TEST MODE</span>
     <span class="pill hidden" id="issuedByPill"></span>
     <button class="btn btn-outline hidden" id="lockBtn" onclick="lockApp()">Lock</button>
   </div>
@@ -236,6 +252,10 @@
 
   <div class="setupBanner" id="setupBanner">
     ⚠️ Firebase is not configured yet. Replace the placeholder values in <code>firebaseConfig</code> near the top of the script with your real project keys for this page to work.
+  </div>
+
+  <div class="testBanner" id="testBanner">
+    🧪 TEST MODE is ON — receipts saved now will always use Receipt No. 0 and will NOT advance the real receipt counter. Switch <code>TEST_MODE</code> to <code>false</code> in the script before issuing real receipts.
   </div>
 
   <!-- ════════ Password gate ════════ -->
@@ -448,6 +468,16 @@
   // Change any time.
   const CANCEL_PASSWORD = "GoldenRestore";
 
+  // ── TEST MODE ──
+  // While true: every receipt saved through the form is stamped Receipt No. 0 (an
+  // obviously fake number) and the real "next serial" counter stored in Firestore is
+  // NOT incremented — so test saves never consume or shift your real receipt numbering.
+  // Use this while trying out the form, checking the PDF layout, or training new
+  // accountants. A yellow "TEST MODE" badge and banner appear in the app as a reminder.
+  // Set this to false for live/production use — receipts then get real, sequential
+  // serial numbers and the counter advances normally (i.e. user-testing is not being done).
+  const TEST_MODE = true;
+
   const COUNTER_PATH = { collection: 'receipt_meta', doc: 'counter' };
   const RECEIPTS_COLLECTION = 'receipts';
 
@@ -492,6 +522,10 @@
     populateStaticDropdowns();
     populateAccountantDropdown();
     setDefaultDate();
+    if (TEST_MODE) {
+      document.getElementById('testBanner').classList.add('show');
+      document.getElementById('testModePill').classList.remove('hidden');
+    }
     if (!isConfigured) {
       document.getElementById('setupBanner').classList.add('show');
       setSyncPill(false, 'Not configured');
@@ -602,6 +636,12 @@
   function startCounterListener() {
     if (counterListenerStarted) return;
     counterListenerStarted = true;
+    if (TEST_MODE) {
+      // In test mode every save is forced to serial 0 — show that plainly instead of
+      // the real counter, so nobody mistakes a test run for a real upcoming serial.
+      document.getElementById('nextSerialPreview').textContent = '0 (TEST MODE)';
+      return;
+    }
     db.collection(COUNTER_PATH.collection).doc(COUNTER_PATH.doc).onSnapshot(snap => {
       const next = (snap.exists && snap.data().nextSerial) ? snap.data().nextSerial : 1;
       document.getElementById('nextSerialPreview').textContent = String(next);
@@ -1018,9 +1058,25 @@
 
   // Atomically reserve the next serial number and write the receipt record together,
   // so two people saving at the same time can never collide on the same serial.
+  //
+  // TEST_MODE bypasses the counter entirely: every save is forced to serial 0 and the
+  // real "nextSerial" counter document is never read or written, so it stays exactly
+  // where it was — flipping TEST_MODE back to false picks up real numbering right
+  // where it left off, unaffected by however many test receipts were saved.
   function saveReceiptTransaction(data) {
     const counterRef = db.collection(COUNTER_PATH.collection).doc(COUNTER_PATH.doc);
     const receiptsRef = db.collection(RECEIPTS_COLLECTION);
+
+    if (TEST_MODE) {
+      const assignedSerial = 0;
+      const recordRef = receiptsRef.doc(String(assignedSerial));
+      return recordRef.set(Object.assign({}, data, {
+        serialNo: assignedSerial,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        testMode: true
+      })).then(() => assignedSerial);
+    }
+
     let assignedSerial;
     return db.runTransaction(async (tx) => {
       const counterSnap = await tx.get(counterRef);
