@@ -504,7 +504,7 @@
     logoImg.onerror = () => resolve(false);
     logoImg.src = 'GoldenDreamHomes_NoBackground.png';
   });
-  const LOGO_ASPECT = 1121 / 793; // width / height
+  const LOGO_ASPECT = 320 / 226; // width / height (logo file resized to 320x226 to keep generated PDFs small)
 
   // ── Init Firebase ──
   if (isConfigured) {
