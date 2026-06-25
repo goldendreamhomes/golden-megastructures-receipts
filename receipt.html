@@ -369,8 +369,8 @@
         <!-- NEFT/RTGS/IMPS/UPI fields -->
         <div class="payblock hidden" id="electronicFields">
           <div class="field">
-            <label>UTR No. <span class="req">*</span></label>
-            <input type="text" id="fUtrNo" maxlength="22" placeholder="22-character UTR" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+            <label>UTR No. <span class="req">*</span> <span class="hint" id="utrHint"></span></label>
+            <input type="text" id="fUtrNo" oninput="handleUtrInput()">
           </div>
           <div class="field">
             <label>Dated <span class="req">*</span></label>
@@ -902,7 +902,17 @@
   const PHONE_RE = /^[0-9]{10}$/;
   const INSTR_RE = /^[0-9]{6}$/;
   const IFSC_RE = /^[A-Za-z]{4}0[A-Za-z0-9]{6}$/;
-  const UTR_RE = /^[A-Za-z0-9]{22}$/;
+
+  // UTR / reference-number rules vary by electronic payment mode:
+  //   UPI / IMPS — 12 digits, numbers only
+  //   NEFT       — 16 characters, alphanumeric
+  //   RTGS       — 22 characters, alphanumeric
+  const UTR_RULES = {
+    UPI:  { length: 12, re: /^[0-9]{12}$/,       numericOnly: true,  label: '12 digits (numbers only)' },
+    IMPS: { length: 12, re: /^[0-9]{12}$/,       numericOnly: true,  label: '12 digits (numbers only)' },
+    NEFT: { length: 16, re: /^[A-Za-z0-9]{16}$/, numericOnly: false, label: '16 alphanumeric characters' },
+    RTGS: { length: 22, re: /^[A-Za-z0-9]{22}$/, numericOnly: false, label: '22 alphanumeric characters' }
+  };
 
   function flatNo(floor, unit) { return `${floor}${String(unit).padStart(2, '0')}`; }
 
@@ -930,9 +940,24 @@
     elecBlock.classList.add('hidden');
     if (mode === 'Cheque' || mode === 'DD') {
       instrBlock.classList.remove('hidden');
-    } else if (mode === 'NEFT' || mode === 'RTGS' || mode === 'IMPS' || mode === 'UPI') {
+    } else if (UTR_RULES[mode]) {
       elecBlock.classList.remove('hidden');
+      const rule = UTR_RULES[mode];
+      const utrEl = document.getElementById('fUtrNo');
+      utrEl.maxLength = rule.length;
+      utrEl.placeholder = `${rule.length}-character ${mode} ${rule.numericOnly ? 'reference no.' : 'UTR'}`;
+      document.getElementById('utrHint').textContent = `(${rule.label})`;
+      handleUtrInput(); // re-sanitize any existing value to match the newly selected mode's rules
     }
+  }
+
+  // UPI/IMPS reference numbers are numeric-only; NEFT/RTGS UTRs are alphanumeric and
+  // shown uppercase. Mode-specific length is enforced separately via UTR_RULES.
+  function handleUtrInput() {
+    const mode = document.getElementById('fPaymentMode').value;
+    const el = document.getElementById('fUtrNo');
+    const rule = UTR_RULES[mode];
+    el.value = (rule && rule.numericOnly) ? el.value.replace(/[^0-9]/g, '') : el.value.toUpperCase();
   }
 
   /* ════════════════════════════════════════════════════════
@@ -1027,7 +1052,10 @@
     } else {
       const utrNo = document.getElementById('fUtrNo').value.trim();
       const txnDate = document.getElementById('fTxnDate').value;
-      if (!UTR_RE.test(utrNo)) return fail('UTR No. must be exactly 22 alphanumeric characters.');
+      const utrRule = UTR_RULES[paymentMode];
+      if (!utrRule || !utrRule.re.test(utrNo)) {
+        return fail(`UTR No. for ${paymentMode} must be ${utrRule ? utrRule.label : 'in the correct format'}.`);
+      }
       if (!txnDate) return fail('Transaction Dated is required.');
       Object.assign(data, { utrNo, transactionDate: txnDate });
     }
