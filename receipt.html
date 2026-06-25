@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Golden Megastructures LLP — Payment Receipts</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+  :root {
+    --gold: #a9762f;
+    --gold-light: #c99a4a;
+    --gold-pale: #f3e6cc;
+    --ink: #2b2118;
+    --text: #4a4a48;
+    --bg: #f7f4ef;
+    --card: #ffffff;
+    --border: #e6ddd0;
+    --green: #276749;
+    --red: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .topbar {
+    background: linear-gradient(135deg, var(--ink), #3a2c1d);
+    color: #fff;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .topbar .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .topbar .brand img { height: 38px; }
+  .topbar .brand .t1 { font-weight: 700; font-size: 1.05rem; letter-spacing: .3px; }
+  .topbar .brand .t2 { font-size: .78rem; opacity: .8; }
+  .topbar .actions { display: flex; gap: 8px; align-items: center; }
+  .pill {
+    font-size: .75rem;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.12);
+  }
+  .pill.ok { background: rgba(72,187,120,.25); }
+  .pill.bad { background: rgba(229,62,62,.3); }
+  .btn {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: .15s;
+  }
+  .btn-gold { background: var(--gold); color: #fff; }
+  .btn-gold:hover { background: #8e5f24; }
+  .btn-outline { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.4); }
+  .btn-outline:hover { background: rgba(255,255,255,.1); }
+  .btn-cancel { background: #eee; color: #333; }
+  .btn-cancel:hover { background: #ddd; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 22px 16px 60px; }
+
+  /* ── Password gate ── */
+  .gate {
+    max-width: 380px;
+    margin: 60px auto;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 34px 28px;
+    text-align: center;
+    box-shadow: 0 6px 24px rgba(0,0,0,.06);
+  }
+  .gate img { height: 56px; margin-bottom: 14px; }
+  .gate h2 { margin: 0 0 6px; color: var(--ink); font-size: 1.2rem; }
+  .gate p { font-size: .85rem; color: #888; margin: 0 0 18px; }
+  .gate input {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: .95rem;
+    margin-bottom: 12px;
+  }
+  .gate .err { color: var(--red); font-size: .82rem; min-height: 18px; margin-bottom: 8px; }
+
+  .hidden { display: none !important; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin-bottom: 22px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.03);
+  }
+  .card h3 {
+    margin: 0 0 16px;
+    color: var(--ink);
+    font-size: 1.05rem;
+    border-bottom: 2px solid var(--gold-pale);
+    padding-bottom: 10px;
+  }
+  .grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 18px;
+  }
+  @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field.full { grid-column: 1 / -1; }
+  .field label { font-size: .82rem; font-weight: 600; color: var(--ink); }
+  .field label .req { color: var(--red); }
+  .field input, .field select {
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font-size: .92rem;
+    background: #fff;
+    color: var(--text);
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--gold-light); }
+  .hint { font-size: .74rem; color: #999; }
+  .preview-box {
+    background: var(--gold-pale);
+    border: 1px solid var(--gold-light);
+    border-radius: 7px;
+    padding: 9px 10px;
+    font-size: .85rem;
+    color: var(--ink);
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+  }
+  .payblock {
+    grid-column: 1 / -1;
+    border-top: 1px dashed var(--border);
+    padding-top: 14px;
+    margin-top: 4px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 18px;
+  }
+  @media (max-width: 600px) { .payblock { grid-template-columns: 1fr; } }
+
+  .formErr {
+    color: var(--red);
+    font-size: .85rem;
+    margin-top: 14px;
+    display: none;
+  }
+  .actionbar {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+    flex-wrap: wrap;
+  }
+  .success-banner {
+    background: #f0fff4;
+    border: 1px solid #9ae6b4;
+    color: var(--green);
+    border-radius: 9px;
+    padding: 12px 14px;
+    font-size: .88rem;
+    margin-bottom: 16px;
+    display: none;
+  }
+
+  table.log { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  table.log th, table.log td {
+    text-align: left;
+    padding: 8px 9px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  table.log th { color: var(--ink); font-size: .76rem; text-transform: uppercase; letter-spacing: .3px; }
+  table.log .dl-btn {
+    background: var(--gold-pale);
+    border: 1px solid var(--gold-light);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: .76rem;
+    cursor: pointer;
+  }
+  table.log .dl-btn:hover { background: var(--gold-light); color: #fff; }
+  .table-scroll { overflow-x: auto; }
+  .empty-row { color: #999; font-style: italic; text-align: center; padding: 16px; }
+
+  .setupBanner {
+    background: #fff3cd;
+    border: 1px solid #ffe69c;
+    color: #6b4d00;
+    padding: 10px 14px;
+    font-size: .82rem;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .setupBanner.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <img src="GoldenDreamHomes_NoBackground.png" alt="Golden Dream Homes">
+    <div>
+      <div class="t1">Golden Megastructures LLP</div>
+      <div class="t2">Payment Receipt Generator</div>
+    </div>
+  </div>
+  <div class="actions">
+    <span class="pill" id="syncPill">Connecting…</span>
+    <span class="pill hidden" id="issuedByPill"></span>
+    <button class="btn btn-outline hidden" id="lockBtn" onclick="lockApp()">Lock</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="setupBanner" id="setupBanner">
+    ⚠️ Firebase is not configured yet. Replace the placeholder values in <code>firebaseConfig</code> near the top of the script with your real project keys for this page to work.
+  </div>
+
+  <!-- ════════ Password gate ════════ -->
+  <div class="gate" id="gateArea">
+    <img src="GoldenDreamHomes_NoBackground.png" alt="Golden Dream Homes">
+    <h2>Login Required</h2>
+    <p>Select your name and enter your password to issue or view payment receipts.</p>
+    <select id="gateName" style="width:100%; padding:11px 12px; border:1px solid var(--border); border-radius:8px; font-size:.95rem; margin-bottom:12px;"></select>
+    <input type="password" id="gatePassword" placeholder="Password" onkeydown="if(event.key==='Enter') submitGatePassword()">
+    <div class="err" id="gateErr"></div>
+    <button class="btn btn-gold" style="width:100%" onclick="submitGatePassword()">Unlock</button>
+  </div>
+
+  <!-- ════════ Main app (hidden until unlocked) ════════ -->
+  <div class="hidden" id="appArea">
+
+    <div class="success-banner" id="successBanner"></div>
+
+    <div class="card">
+      <h3>New Payment Receipt</h3>
+      <div class="grid2" id="receiptForm">
+
+        <div class="field">
+          <label>Date <span class="req">*</span></label>
+          <input type="date" id="fDate">
+        </div>
+        <div class="field">
+          <label>Receipt No. (auto)</label>
+          <div class="preview-box" id="nextSerialPreview">—</div>
+        </div>
+
+        <div class="field">
+          <label>Customer Name <span class="req">*</span></label>
+          <input type="text" id="fCustomerName" placeholder="Full name">
+        </div>
+        <div class="field">
+          <label>Primary Contact No. <span class="req">*</span></label>
+          <input type="text" id="fContact" maxlength="10" inputmode="numeric" placeholder="10-digit mobile number">
+        </div>
+
+        <div class="field">
+          <label>Customer's PAN No. <span class="hint" style="font-weight:400;">(optional)</span></label>
+          <input type="text" id="fPan" maxlength="10" placeholder="AAAAA9999A" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <div class="field">
+          <label>Amount Received (₹) <span class="req">*</span></label>
+          <input type="number" id="fAmount" min="0" step="0.01" placeholder="0.00" oninput="updateAmountWordsPreview()">
+        </div>
+
+        <div class="field full">
+          <label>Amount in Words (auto)</label>
+          <div class="preview-box" id="amountWordsPreview">—</div>
+        </div>
+
+        <div class="field">
+          <label>Project <span class="req">*</span></label>
+          <select id="fProject"></select>
+        </div>
+        <div class="field">
+          <label>Tower <span class="req">*</span></label>
+          <select id="fTower" onchange="populateFloorOptions()"></select>
+        </div>
+
+        <div class="field">
+          <label>Floor <span class="req">*</span></label>
+          <select id="fFloor" onchange="updateFlatNoPreview()"></select>
+        </div>
+        <div class="field">
+          <label>Unit <span class="req">*</span></label>
+          <select id="fUnit" onchange="updateFlatNoPreview()"></select>
+        </div>
+
+        <div class="field full">
+          <label>Flat No. (auto)</label>
+          <div class="preview-box" id="flatNoPreview">—</div>
+        </div>
+
+        <div class="field full">
+          <label>Payment Mode <span class="req">*</span></label>
+          <select id="fPaymentMode" onchange="togglePaymentFields()">
+            <option value="">— Select —</option>
+            <option value="Cheque">Cheque</option>
+            <option value="DD">DD</option>
+            <option value="NEFT">NEFT</option>
+            <option value="RTGS">RTGS</option>
+            <option value="IMPS">IMPS</option>
+            <option value="UPI">UPI</option>
+          </select>
+        </div>
+
+        <!-- Cheque / DD fields -->
+        <div class="payblock hidden" id="instrumentFields">
+          <div class="field">
+            <label>Instrument No. <span class="req">*</span></label>
+            <input type="text" id="fInstrumentNo" maxlength="6" inputmode="numeric" placeholder="6-digit number">
+          </div>
+          <div class="field">
+            <label>Dated <span class="req">*</span></label>
+            <input type="date" id="fInstrumentDate">
+          </div>
+          <div class="field">
+            <label>Bank &amp; Branch <span class="req">*</span></label>
+            <input type="text" id="fBankBranch" placeholder="e.g. HDFC Bank, Nagpur Main">
+          </div>
+          <div class="field">
+            <label>IFSC Code <span class="req">*</span></label>
+            <input type="text" id="fIfsc" maxlength="11" placeholder="e.g. HDFC0001234" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+          </div>
+        </div>
+
+        <!-- NEFT/RTGS/IMPS/UPI fields -->
+        <div class="payblock hidden" id="electronicFields">
+          <div class="field">
+            <label>UTR No. <span class="req">*</span></label>
+            <input type="text" id="fUtrNo" maxlength="22" placeholder="22-character UTR" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+          </div>
+          <div class="field">
+            <label>Dated <span class="req">*</span></label>
+            <input type="date" id="fTxnDate">
+          </div>
+        </div>
+
+        <div class="field full" style="flex-direction:row; align-items:center; gap:10px;">
+          <input type="checkbox" id="fRequireSignature" style="width:auto; margin:0;">
+          <label style="margin:0;">Requires physical signature (override for high-value receipts)</label>
+        </div>
+
+      </div>
+
+      <div class="formErr" id="formErr"></div>
+      <div class="actionbar">
+        <button class="btn btn-gold" id="generateBtn" onclick="handleGenerateReceipt()">Generate Receipt &amp; Save</button>
+        <button class="btn btn-cancel" onclick="resetForm()">Reset Form</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Recent Receipts</h3>
+      <div style="display:flex; gap:10px; align-items:flex-end; margin-bottom:14px; flex-wrap:wrap;">
+        <div class="field" style="flex:0 0 160px;">
+          <label>From</label>
+          <input type="date" id="logFrom">
+        </div>
+        <div class="field" style="flex:0 0 160px;">
+          <label>To</label>
+          <input type="date" id="logTo">
+        </div>
+        <button class="btn btn-gold" onclick="applyLogFilter()">Filter</button>
+        <button class="btn btn-cancel" onclick="clearLogFilter()">Clear</button>
+        <span class="hint" id="logFilterStatus" style="align-self:center;">Showing most recent 15 receipts.</span>
+      </div>
+      <div class="table-scroll">
+        <table class="log">
+          <thead>
+            <tr>
+              <th>No.</th><th>Date</th><th>Customer</th><th>Flat No.</th><th>Amount</th><th>Mode</th><th>Issued By</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="logBody">
+            <tr><td colspan="9" class="empty-row">No receipts yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  /* ════════════════════════════════════════════════════════
+     FIREBASE CONFIG
+     Reuses the same Firebase project as booking.html (golden-legacy-booking)
+     for simplicity — this tool only touches its own collections
+     ("receipt_meta" / "receipts"), completely separate from the booking
+     data. If you'd rather keep this tool on a fully separate Firebase
+     project, just swap these values out for a new project's config.
+     ════════════════════════════════════════════════════════ */
+  const firebaseConfig = {
+    apiKey: "AIzaSyDOfi8f02dqTOVLsrZ-S8dvibD2HonftVA",
+    authDomain: "golden-legacy-booking.firebaseapp.com",
+    projectId: "golden-legacy-booking",
+    storageBucket: "golden-legacy-booking.firebasestorage.app",
+    messagingSenderId: "314777966271",
+    appId: "1:314777966271:web:57ecc2f0160e41b9cbd80a"
+  };
+
+  /* Suggested Firestore security rules for this tool's paths (set these in the
+     Firebase console — this is purely internal financial data, so unlike
+     booking.html there is NO public read rule at all):
+
+     match /receipt_meta/{docId}  { allow read, write: if request.auth != null; }
+     match /receipts/{docId}      { allow read, write: if request.auth != null; }
+  */
+
+  // ── Accountant logins (Login screen) ──
+  // Add, remove, or rename accountants and their passwords here any time.
+  // This is still a soft deterrent only (same security level as a single shared
+  // password) — it does NOT use real Firebase user accounts — but every receipt
+  // gets stamped with "Issued By" using the selected name, for traceability.
+  // ⚠️ Replace these placeholder names/passwords with your real accountants before going live.
+  const ACCOUNTANTS = [
+    { name: "Accountant 1", password: "GoldenReceipt2026" },
+    { name: "Accountant 2", password: "GoldenReceipt2027" }
+  ];
+
+  // ── Cancel / Uncancel password (separate, higher-trust permission) ──
+  // Deliberately a different password from the accountant logins above, so both
+  // cancelling AND restoring a receipt require an extra step beyond just being logged
+  // in — share this one only with senior staff / the owner, not the regular accountants.
+  // Change any time.
+  const CANCEL_PASSWORD = "GoldenRestore2026";
+
+  const COUNTER_PATH = { collection: 'receipt_meta', doc: 'counter' };
+  const RECEIPTS_COLLECTION = 'receipts';
+
+  // ── Extensible lookup lists — add to these any time ──
+  const PROJECTS = ["Golden Legacy"];
+  const TOWERS = ["B"];
+  const TOWER_FLOORS = { "B": 16 };   // floors per tower
+  const UNITS_PER_FLOOR = 8;
+
+  let isConfigured = !Object.values(firebaseConfig).some(v => String(v).startsWith('PASTE_'));
+  let db = null, auth = null;
+  let unlocked = false;
+  let currentAccountant = null;
+  let supersedesSerial = null;   // set when reissuing after a cancellation
+  let filterActive = false;      // true while the date-range filter is applied to the log
+  let receiptsCache = {};   // serialNo (string) -> stored data, from the recent-receipts listener / filter
+  let logListenerStarted = false;
+  let counterListenerStarted = false;
+
+  // ── Logo, preloaded once so jsPDF can embed it ──
+  const logoImg = new Image();
+  const logoLoadPromise = new Promise((resolve) => {
+    logoImg.onload = () => resolve(true);
+    logoImg.onerror = () => resolve(false);
+    logoImg.src = 'GoldenDreamHomes_NoBackground.png';
+  });
+  const LOGO_ASPECT = 1121 / 793; // width / height
+
+  // ── Init Firebase ──
+  if (isConfigured) {
+    try {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      auth = firebase.auth();
+    } catch (e) {
+      isConfigured = false;
+      console.error('Firebase init failed', e);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    populateStaticDropdowns();
+    populateAccountantDropdown();
+    setDefaultDate();
+    if (!isConfigured) {
+      document.getElementById('setupBanner').classList.add('show');
+      setSyncPill(false, 'Not configured');
+      return;
+    }
+    setSyncPill(true, 'Ready');
+  });
+
+  function populateAccountantDropdown() {
+    const sel = document.getElementById('gateName');
+    sel.innerHTML = ACCOUNTANTS.map(a => `<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
+  }
+
+  function populateStaticDropdowns() {
+    const proj = document.getElementById('fProject');
+    proj.innerHTML = '<option value="">— Select —</option>' +
+      PROJECTS.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+
+    const tower = document.getElementById('fTower');
+    tower.innerHTML = '<option value="">— Select —</option>' +
+      TOWERS.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+
+    const unit = document.getElementById('fUnit');
+    let unitOpts = '<option value="">— Select —</option>';
+    for (let u = 1; u <= UNITS_PER_FLOOR; u++) unitOpts += `<option value="${u}">${u}</option>`;
+    unit.innerHTML = unitOpts;
+
+    populateFloorOptions();
+  }
+
+  function populateFloorOptions() {
+    const tower = document.getElementById('fTower').value;
+    const floorSel = document.getElementById('fFloor');
+    const count = TOWER_FLOORS[tower] || 0;
+    let opts = '<option value="">— Select —</option>';
+    for (let f = 1; f <= count; f++) opts += `<option value="${f}">${f}</option>`;
+    floorSel.innerHTML = opts;
+    updateFlatNoPreview();
+  }
+
+  function setDefaultDate() {
+    const today = new Date().toISOString().slice(0, 10);
+    const dEl = document.getElementById('fDate');
+    dEl.value = today;
+    dEl.max = today; // only past/today, no future-dating
+    document.getElementById('fInstrumentDate').max = today;
+    document.getElementById('fTxnDate').max = today;
+  }
+
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function setSyncPill(ok, text) {
+    const pill = document.getElementById('syncPill');
+    pill.textContent = text;
+    pill.className = 'pill ' + (ok ? 'ok' : 'bad');
+  }
+
+  /* ════════════════════════════════════════════════════════
+     PASSWORD GATE
+     ════════════════════════════════════════════════════════ */
+  function submitGatePassword() {
+    const name = document.getElementById('gateName').value;
+    const val = document.getElementById('gatePassword').value;
+    const errEl = document.getElementById('gateErr');
+    const acct = ACCOUNTANTS.find(a => a.name === name);
+    if (!acct || val !== acct.password) {
+      errEl.textContent = 'Incorrect password for the selected name.';
+      return;
+    }
+    errEl.textContent = '';
+    if (!isConfigured) {
+      errEl.textContent = 'Firebase is not configured — see the banner above.';
+      return;
+    }
+    auth.signInAnonymously().then(() => {
+      unlocked = true;
+      currentAccountant = acct.name;
+      document.getElementById('gateArea').classList.add('hidden');
+      document.getElementById('appArea').classList.remove('hidden');
+      document.getElementById('lockBtn').classList.remove('hidden');
+      const pill = document.getElementById('issuedByPill');
+      pill.textContent = 'Logged in as ' + acct.name;
+      pill.classList.remove('hidden');
+      startCounterListener();
+      startLogListener();
+    }).catch(e => {
+      console.error(e);
+      errEl.textContent = 'Could not connect — check your internet connection and try again.';
+    });
+  }
+
+  function lockApp() {
+    unlocked = false;
+    currentAccountant = null;
+    document.getElementById('appArea').classList.add('hidden');
+    document.getElementById('lockBtn').classList.add('hidden');
+    document.getElementById('issuedByPill').classList.add('hidden');
+    document.getElementById('gateArea').classList.remove('hidden');
+    document.getElementById('gatePassword').value = '';
+    if (auth) auth.signOut().catch(() => {});
+  }
+
+  /* ════════════════════════════════════════════════════════
+     LIVE NEXT-SERIAL PREVIEW
+     ════════════════════════════════════════════════════════ */
+  function startCounterListener() {
+    if (counterListenerStarted) return;
+    counterListenerStarted = true;
+    db.collection(COUNTER_PATH.collection).doc(COUNTER_PATH.doc).onSnapshot(snap => {
+      const next = (snap.exists && snap.data().nextSerial) ? snap.data().nextSerial : 1;
+      document.getElementById('nextSerialPreview').textContent = String(next);
+    }, err => {
+      console.error('Counter listener failed', err);
+      document.getElementById('nextSerialPreview').textContent = '—';
+    });
+  }
+
+  /* ════════════════════════════════════════════════════════
+     RECENT RECEIPTS LOG
+     ════════════════════════════════════════════════════════ */
+  function startLogListener() {
+    if (logListenerStarted) return;
+    logListenerStarted = true;
+    db.collection(RECEIPTS_COLLECTION).orderBy('serialNo', 'desc').limit(15).onSnapshot(snap => {
+      const rows = [];
+      snap.forEach(doc => {
+        const data = doc.data();
+        receiptsCache[doc.id] = data;
+        rows.push(data);
+      });
+      if (!filterActive) renderLog(rows);
+    }, err => {
+      console.error('Log listener failed', err);
+    });
+  }
+
+  function renderLog(rows) {
+    const body = document.getElementById('logBody');
+    if (rows.length === 0) {
+      body.innerHTML = '<tr><td colspan="9" class="empty-row">No receipts found.</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(r => {
+      const isCancelled = !!r.cancelled;
+      let statusBadge;
+      if (isCancelled) {
+        statusBadge = `<span style="color:var(--red); font-weight:600;">Cancelled</span>` +
+          (r.supersededBy ? `<br><span style="font-size:.7rem; color:#999;">→ Reissued as #${esc(r.supersededBy)}</span>` : '');
+      } else if (r.uncancelledAt) {
+        statusBadge = `<span style="color:var(--green);">Restored</span>` +
+          (r.supersedes ? `<br><span style="font-size:.7rem; color:#999;">Reissue of #${esc(r.supersedes)}</span>` : '');
+      } else if (r.supersedes) {
+        statusBadge = `<span style="color:var(--green);">Reissue of #${esc(r.supersedes)}</span>`;
+      } else {
+        statusBadge = '—';
+      }
+      const actionBtn = isCancelled
+        ? `<button class="dl-btn" style="background:#e8f5e9; border-color:#b9e3bd;" onclick="uncancelReceipt('${esc(r.serialNo)}')">↩ Uncancel</button>`
+        : `<button class="dl-btn" style="background:#fde8e8; border-color:#f5b5b5;" onclick="cancelReceipt('${esc(r.serialNo)}')">🚫 Cancel</button>`;
+      return `
+      <tr style="${isCancelled ? 'opacity:.55;' : ''}">
+        <td>${esc(r.serialNo)}</td>
+        <td>${esc(formatDateDMY(r.date))}</td>
+        <td>${esc(r.customerName)}</td>
+        <td>${esc(r.flatNo)}</td>
+        <td>₹${esc(formatINR(r.amount))}</td>
+        <td>${esc(r.paymentMode)}</td>
+        <td>${esc(r.issuedBy || '—')}</td>
+        <td>${statusBadge}</td>
+        <td style="white-space:nowrap;">
+          <button class="dl-btn" onclick="redownloadReceipt('${esc(r.serialNo)}')">⬇ PDF</button>
+          ${actionBtn}
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function redownloadReceipt(serialNo) {
+    const data = receiptsCache[String(serialNo)];
+    if (!data) { alert('Could not find that receipt in the local cache — try reloading the page.'); return; }
+    buildReceiptPDF(data);
+  }
+
+  /* ════════════════════════════════════════════════════════
+     DATE-RANGE FILTER ON THE LOG
+     ════════════════════════════════════════════════════════ */
+  async function applyLogFilter() {
+    const from = document.getElementById('logFrom').value;
+    const to = document.getElementById('logTo').value;
+    if (!from || !to) { alert('Pick both a "From" and "To" date.'); return; }
+    if (from > to) { alert('"From" date must be on or before the "To" date.'); return; }
+    try {
+      const snap = await db.collection(RECEIPTS_COLLECTION)
+        .where('date', '>=', from).where('date', '<=', to)
+        .orderBy('date', 'desc').get();
+      const rows = [];
+      snap.forEach(doc => { receiptsCache[doc.id] = doc.data(); rows.push(doc.data()); });
+      filterActive = true;
+      document.getElementById('logFilterStatus').textContent = `Showing receipts from ${formatDateDMY(from)} to ${formatDateDMY(to)} (${rows.length} found).`;
+      renderLog(rows);
+    } catch (e) {
+      console.error('Filter failed', e);
+      alert('Could not filter receipts — check your internet connection and try again. (' + e.message + ')');
+    }
+  }
+
+  function clearLogFilter() {
+    filterActive = false;
+    document.getElementById('logFrom').value = '';
+    document.getElementById('logTo').value = '';
+    document.getElementById('logFilterStatus').textContent = 'Showing most recent 15 receipts.';
+    db.collection(RECEIPTS_COLLECTION).orderBy('serialNo', 'desc').limit(15).get().then(snap => {
+      const rows = [];
+      snap.forEach(doc => { receiptsCache[doc.id] = doc.data(); rows.push(doc.data()); });
+      renderLog(rows);
+    }).catch(e => console.error('Clear filter reload failed', e));
+  }
+
+  /* ════════════════════════════════════════════════════════
+     CANCEL + AUTO-REISSUE
+     ════════════════════════════════════════════════════════ */
+  async function cancelReceipt(serialNo) {
+    const data = receiptsCache[String(serialNo)];
+    if (!data) { alert('Could not find that receipt in the local cache — try reloading the page.'); return; }
+    if (data.cancelled) { alert('This receipt is already cancelled.'); return; }
+    const reason = prompt(`Reason for cancelling Receipt No. ${serialNo}:`);
+    if (reason === null) return; // accountant backed out of the prompt
+    if (!reason.trim()) { alert('A reason is required to cancel a receipt.'); return; }
+
+    const pwd = prompt(`Enter the special password to cancel Receipt No. ${serialNo}:`);
+    if (pwd === null) return;
+    if (pwd !== CANCEL_PASSWORD) { alert('Incorrect password — the receipt was not cancelled.'); return; }
+
+    try {
+      await db.collection(RECEIPTS_COLLECTION).doc(String(serialNo)).update({
+        cancelled: true,
+        cancelReason: reason.trim(),
+        cancelledAt: firebase.firestore.FieldValue.serverTimestamp(),
+        cancelledBy: currentAccountant || ''
+      });
+      prefillForReissue(data, serialNo);
+      const banner = document.getElementById('successBanner');
+      banner.textContent = `🚫 Receipt No. ${serialNo} cancelled. The form below has been pre-filled with its details — review, correct the mistake, and click "Generate Receipt & Save" to issue the corrected receipt.`;
+      banner.style.display = 'block';
+      document.getElementById('receiptForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      console.error('Cancel failed', e);
+      alert('Could not cancel the receipt — check your internet connection and try again. (' + e.message + ')');
+    }
+  }
+
+  // Restoring a cancelled receipt requires the same special password (CANCEL_PASSWORD) used to
+  // cancel in the first place — on top of already being logged in. Both actions are deliberately
+  // a bigger hurdle than ordinary form entry, since they touch financial records after the fact.
+  async function uncancelReceipt(serialNo) {
+    const data = receiptsCache[String(serialNo)];
+    if (!data) { alert('Could not find that receipt in the local cache — try reloading the page.'); return; }
+    if (!data.cancelled) { alert('This receipt is not cancelled.'); return; }
+
+    if (data.supersededBy) {
+      const proceed = confirm(`Receipt No. ${serialNo} was already reissued as Receipt No. ${data.supersededBy}. Uncancelling it now may create a duplicate record for the same payment. Continue anyway?`);
+      if (!proceed) return;
+    }
+
+    const pwd = prompt(`Enter the special password to uncancel Receipt No. ${serialNo}:`);
+    if (pwd === null) return;
+    if (pwd !== CANCEL_PASSWORD) { alert('Incorrect password — the receipt was not restored.'); return; }
+
+    try {
+      await db.collection(RECEIPTS_COLLECTION).doc(String(serialNo)).update({
+        cancelled: false,
+        uncancelledAt: firebase.firestore.FieldValue.serverTimestamp(),
+        uncancelledBy: currentAccountant || ''
+      });
+      const banner = document.getElementById('successBanner');
+      banner.textContent = `↩ Receipt No. ${serialNo} has been restored. Its cancellation history (reason, date, who cancelled it) is kept for the audit trail.`;
+      banner.style.display = 'block';
+    } catch (e) {
+      console.error('Uncancel failed', e);
+      alert('Could not uncancel the receipt — check your internet connection and try again. (' + e.message + ')');
+    }
+  }
+
+  function prefillForReissue(data, oldSerial) {
+    document.getElementById('fDate').value = data.date || new Date().toISOString().slice(0, 10);
+    document.getElementById('fCustomerName').value = data.customerName || '';
+    document.getElementById('fContact').value = data.contactNo || '';
+    document.getElementById('fPan').value = data.panNo || '';
+    document.getElementById('fAmount').value = data.amount || '';
+    document.getElementById('fProject').value = data.project || '';
+    document.getElementById('fTower').value = data.tower || '';
+    populateFloorOptions();
+    document.getElementById('fFloor').value = data.floor || '';
+    document.getElementById('fUnit').value = data.unit || '';
+    updateFlatNoPreview();
+    document.getElementById('fPaymentMode').value = data.paymentMode || '';
+    togglePaymentFields();
+    document.getElementById('fInstrumentNo').value = data.instrumentNo || '';
+    document.getElementById('fInstrumentDate').value = data.instrumentDate || '';
+    document.getElementById('fBankBranch').value = data.bankBranch || '';
+    document.getElementById('fIfsc').value = data.ifsc || '';
+    document.getElementById('fUtrNo').value = data.utrNo || '';
+    document.getElementById('fTxnDate').value = data.transactionDate || '';
+    document.getElementById('fRequireSignature').checked = !!data.requiresSignature;
+    updateAmountWordsPreview();
+    supersedesSerial = oldSerial;
+  }
+
+  /* ════════════════════════════════════════════════════════
+     NUMBER-TO-WORDS (Indian numbering: Crore / Lakh / Thousand / Hundred)
+     ════════════════════════════════════════════════════════ */
+  function numberToWordsIndian(num) {
+    if (num === 0) return 'Zero';
+    const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+    const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    function twoDigits(n) {
+      if (n < 20) return ones[n];
+      return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+    }
+    function threeDigits(n) {
+      let str = '';
+      if (n >= 100) {
+        str += ones[Math.floor(n / 100)] + ' Hundred';
+        n %= 100;
+        if (n) str += ' and ';
+      }
+      str += twoDigits(n);
+      return str.trim();
+    }
+    let crore = Math.floor(num / 10000000); num %= 10000000;
+    let lakh = Math.floor(num / 100000); num %= 100000;
+    let thousand = Math.floor(num / 1000); num %= 1000;
+    let hundred = num;
+    let parts = [];
+    if (crore) parts.push(threeDigits(crore) + ' Crore');
+    if (lakh) parts.push(threeDigits(lakh) + ' Lakh');
+    if (thousand) parts.push(threeDigits(thousand) + ' Thousand');
+    if (hundred) parts.push(threeDigits(hundred));
+    return parts.join(' ').trim();
+  }
+
+  function amountInWords(amount) {
+    amount = Math.round(amount * 100) / 100;
+    const rupees = Math.floor(amount);
+    const paise = Math.round((amount - rupees) * 100);
+    let words = numberToWordsIndian(rupees) + ' Rupee' + (rupees === 1 ? '' : 's');
+    if (paise > 0) words += ' and ' + numberToWordsIndian(paise) + ' Paise';
+    words += ' Only';
+    return words;
+  }
+
+  function formatINR(amount) {
+    return Number(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function formatDateDMY(iso) {
+    if (!iso) return '—';
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  /* ════════════════════════════════════════════════════════
+     VALIDATORS
+     ════════════════════════════════════════════════════════ */
+  const PAN_RE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
+  const PHONE_RE = /^[0-9]{10}$/;
+  const INSTR_RE = /^[0-9]{6}$/;
+  const IFSC_RE = /^[A-Za-z]{4}0[A-Za-z0-9]{6}$/;
+  const UTR_RE = /^[A-Za-z0-9]{22}$/;
+
+  function flatNo(floor, unit) { return `${floor}${String(unit).padStart(2, '0')}`; }
+
+  /* ════════════════════════════════════════════════════════
+     LIVE FORM PREVIEWS
+     ════════════════════════════════════════════════════════ */
+  function updateAmountWordsPreview() {
+    const val = parseFloat(document.getElementById('fAmount').value);
+    const el = document.getElementById('amountWordsPreview');
+    el.textContent = (!isNaN(val) && val > 0) ? amountInWords(val) : '—';
+  }
+
+  function updateFlatNoPreview() {
+    const floor = document.getElementById('fFloor').value;
+    const unit = document.getElementById('fUnit').value;
+    const el = document.getElementById('flatNoPreview');
+    el.textContent = (floor && unit) ? flatNo(floor, unit) : '—';
+  }
+
+  function togglePaymentFields() {
+    const mode = document.getElementById('fPaymentMode').value;
+    const instrBlock = document.getElementById('instrumentFields');
+    const elecBlock = document.getElementById('electronicFields');
+    instrBlock.classList.add('hidden');
+    elecBlock.classList.add('hidden');
+    if (mode === 'Cheque' || mode === 'DD') {
+      instrBlock.classList.remove('hidden');
+    } else if (mode === 'NEFT' || mode === 'RTGS' || mode === 'IMPS' || mode === 'UPI') {
+      elecBlock.classList.remove('hidden');
+    }
+  }
+
+  /* ════════════════════════════════════════════════════════
+     FORM RESET
+     ════════════════════════════════════════════════════════ */
+  function resetForm() {
+    document.getElementById('fCustomerName').value = '';
+    document.getElementById('fContact').value = '';
+    document.getElementById('fPan').value = '';
+    document.getElementById('fAmount').value = '';
+    document.getElementById('fProject').value = '';
+    document.getElementById('fTower').value = '';
+    populateFloorOptions();
+    document.getElementById('fUnit').value = '';
+    document.getElementById('fPaymentMode').value = '';
+    document.getElementById('fInstrumentNo').value = '';
+    document.getElementById('fInstrumentDate').value = '';
+    document.getElementById('fBankBranch').value = '';
+    document.getElementById('fIfsc').value = '';
+    document.getElementById('fUtrNo').value = '';
+    document.getElementById('fTxnDate').value = '';
+    document.getElementById('fRequireSignature').checked = false;
+    supersedesSerial = null;
+    setDefaultDate();
+    togglePaymentFields();
+    updateAmountWordsPreview();
+    updateFlatNoPreview();
+    document.getElementById('formErr').style.display = 'none';
+  }
+
+  /* ════════════════════════════════════════════════════════
+     VALIDATE + GENERATE + SAVE
+     ════════════════════════════════════════════════════════ */
+  async function handleGenerateReceipt() {
+    const errEl = document.getElementById('formErr');
+    errEl.style.display = 'none';
+
+    function fail(msg) {
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+      alert(msg);
+    }
+
+    const date = document.getElementById('fDate').value;
+    const customerName = document.getElementById('fCustomerName').value.trim();
+    const contactNo = document.getElementById('fContact').value.trim();
+    const panNo = document.getElementById('fPan').value.trim();
+    const amountStr = document.getElementById('fAmount').value;
+    const amount = parseFloat(amountStr);
+    const project = document.getElementById('fProject').value;
+    const tower = document.getElementById('fTower').value;
+    const floor = document.getElementById('fFloor').value;
+    const unit = document.getElementById('fUnit').value;
+    const paymentMode = document.getElementById('fPaymentMode').value;
+    const requiresSignature = document.getElementById('fRequireSignature').checked;
+
+    if (!date) return fail('Date is required.');
+    if (!customerName) return fail('Customer Name is required.');
+    if (!PHONE_RE.test(contactNo)) return fail('Primary Contact No. must be exactly 10 digits.');
+    if (panNo && !PAN_RE.test(panNo)) return fail('PAN No. format is invalid. Expected format: AAAAA9999A (5 letters, 4 digits, 1 letter).');
+    if (isNaN(amount) || amount <= 0) return fail('Amount Received must be a valid positive number.');
+    if (!project) return fail('Project is required.');
+    if (!tower) return fail('Tower is required.');
+    if (!floor) return fail('Floor is required.');
+    if (!unit) return fail('Unit is required.');
+    if (!paymentMode) return fail('Payment Mode is required.');
+
+    const data = {
+      date, customerName, contactNo,
+      panNo: panNo || '',
+      amount,
+      amountWords: amountInWords(amount),
+      project, tower,
+      floor: Number(floor), unit: Number(unit),
+      flatNo: flatNo(floor, unit),
+      paymentMode,
+      requiresSignature,
+      issuedBy: currentAccountant || ''
+    };
+    if (supersedesSerial) data.supersedes = supersedesSerial;
+
+    if (paymentMode === 'Cheque' || paymentMode === 'DD') {
+      const instrumentNo = document.getElementById('fInstrumentNo').value.trim();
+      const instrumentDate = document.getElementById('fInstrumentDate').value;
+      const bankBranch = document.getElementById('fBankBranch').value.trim();
+      const ifsc = document.getElementById('fIfsc').value.trim();
+      if (!INSTR_RE.test(instrumentNo)) return fail('Instrument No. must be exactly 6 digits.');
+      if (!instrumentDate) return fail('Instrument Dated is required.');
+      if (!bankBranch) return fail('Bank & Branch is required.');
+      if (!IFSC_RE.test(ifsc)) return fail('IFSC Code format is invalid. Expected format: 4 letters + "0" + 6 alphanumeric (e.g. HDFC0001234).');
+      Object.assign(data, { instrumentNo, instrumentDate, bankBranch, ifsc });
+    } else {
+      const utrNo = document.getElementById('fUtrNo').value.trim();
+      const txnDate = document.getElementById('fTxnDate').value;
+      if (!UTR_RE.test(utrNo)) return fail('UTR No. must be exactly 22 alphanumeric characters.');
+      if (!txnDate) return fail('Transaction Dated is required.');
+      Object.assign(data, { utrNo, transactionDate: txnDate });
+    }
+
+    const generateBtn = document.getElementById('generateBtn');
+    generateBtn.disabled = true;
+    generateBtn.textContent = 'Saving…';
+
+    try {
+      const assignedSerial = await saveReceiptTransaction(data);
+      data.serialNo = assignedSerial;
+      await logoLoadPromise;
+      buildReceiptPDF(data);
+      const supersedeNote = data.supersedes ? ` (Reissue of cancelled Receipt No. ${data.supersedes})` : '';
+      const banner = document.getElementById('successBanner');
+      banner.textContent = `✅ Receipt No. ${assignedSerial} saved and downloaded successfully.${supersedeNote}`;
+      banner.style.display = 'block';
+      setTimeout(() => { banner.style.display = 'none'; }, 6000);
+      resetForm();
+    } catch (e) {
+      console.error('Save failed', e);
+      fail('Could not save the receipt — check your internet connection and try again. (' + e.message + ')');
+    } finally {
+      generateBtn.disabled = false;
+      generateBtn.textContent = 'Generate Receipt & Save';
+    }
+  }
+
+  // Atomically reserve the next serial number and write the receipt record together,
+  // so two people saving at the same time can never collide on the same serial.
+  function saveReceiptTransaction(data) {
+    const counterRef = db.collection(COUNTER_PATH.collection).doc(COUNTER_PATH.doc);
+    const receiptsRef = db.collection(RECEIPTS_COLLECTION);
+    let assignedSerial;
+    return db.runTransaction(async (tx) => {
+      const counterSnap = await tx.get(counterRef);
+      const current = (counterSnap.exists && counterSnap.data().nextSerial) ? counterSnap.data().nextSerial : 1;
+      assignedSerial = current;
+      tx.set(counterRef, { nextSerial: current + 1 }, { merge: true });
+      const recordRef = receiptsRef.doc(String(current));
+      tx.set(recordRef, Object.assign({}, data, {
+        serialNo: current,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      }));
+      if (data.supersedes) {
+        tx.update(receiptsRef.doc(String(data.supersedes)), { supersededBy: current });
+      }
+    }).then(() => assignedSerial);
+  }
+
+  /* ════════════════════════════════════════════════════════
+     PDF GENERATION (jsPDF, A4 portrait — matches index.html's quotation PDF style)
+     ════════════════════════════════════════════════════════ */
+  function buildReceiptPDF(data) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    const GOLD = [169, 118, 47];
+    const INK = [43, 33, 24];
+    const GREY = [110, 110, 105];
+    const PALE = [243, 230, 204];
+
+    const pageW = 210, pageH = 297;
+    const margin = 14;
+    const contentW = pageW - margin * 2;
+
+    // Outer border
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.7);
+    doc.roundedRect(8, 8, pageW - 16, pageH - 16, 3, 3, 'S');
+
+    // ── Header: logo + firm details, receipt no./date box ──
+    let y = 18;
+    if (logoImg.complete && logoImg.naturalWidth > 0) {
+      const logoW = 26, logoH = logoW / LOGO_ASPECT;
+      try { doc.addImage(logoImg, 'PNG', margin, y, logoW, logoH); } catch (e) { console.error('Logo embed failed', e); }
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.setTextColor(...INK);
+    doc.text('GOLDEN MEGASTRUCTURES LLP', margin + 30, y + 6);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.3);
+    doc.setTextColor(...GREY);
+    const addrLines = doc.splitTextToSize('Kh. No.139/2, Behind St. Vincent Pallotti School, Besa-Pipla Road, Nagpur - 440037', 100);
+    doc.text(addrLines, margin + 30, y + 11);
+    doc.text('GSTIN: 27AAWFG2884J1ZL', margin + 30, y + 11 + addrLines.length * 3.6);
+    doc.text('Email: finance@goldendreamhomes.in   |   Contact: 9800096333', margin + 30, y + 11 + addrLines.length * 3.6 + 4);
+
+    // Receipt No. / Date box, top-right
+    const boxW = 46, boxH = 24, boxX = pageW - margin - boxW, boxY = 16;
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(boxX, boxY, boxW, boxH, 1.5, 1.5, 'S');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...INK);
+    doc.text('RECEIPT NO.', boxX + boxW / 2, boxY + 6, { align: 'center' });
+    doc.setFontSize(13);
+    doc.setTextColor(...GOLD);
+    doc.text(String(data.serialNo), boxX + boxW / 2, boxY + 13.5, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.3);
+    doc.setTextColor(...INK);
+    doc.text(`Date: ${formatDateDMY(data.date)}`, boxX + boxW / 2, boxY + 20, { align: 'center' });
+
+    if (data.supersedes) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7);
+      doc.setTextColor(...GREY);
+      doc.text(`Reissue of cancelled Receipt No. ${data.supersedes}`, boxX + boxW / 2, boxY + boxH + 3.5, { align: 'center' });
+    }
+
+    y = 46;
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.3);
+    doc.line(margin, y, pageW - margin, y);
+
+    // ── Title bar ──
+    y += 6;
+    doc.setFillColor(...GOLD);
+    doc.roundedRect(margin, y, contentW, 9, 1.5, 1.5, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(255, 255, 255);
+    doc.text('PAYMENT RECEIPT', pageW / 2, y + 6.2, { align: 'center' });
+
+    // ── Body rows ──
+    y += 18;
+    const labelX = margin;
+    const valueX = margin + 42;
+    const col2LabelX = margin + 95;
+    const col2ValueX = margin + 130;
+    const rowH = 8;
+
+    function row(label1, value1, label2, value2) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(...GREY);
+      doc.text(label1, labelX, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...INK);
+      doc.text(String(value1 ?? '—'), valueX, y);
+      if (label2) {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...GREY);
+        doc.text(label2, col2LabelX, y);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...INK);
+        doc.text(String(value2 ?? '—'), col2ValueX, y);
+      }
+      y += rowH;
+    }
+
+    row('Received From', data.customerName, 'Contact No.', data.contactNo);
+    row('PAN No.', data.panNo || '—', 'Flat No.', data.flatNo);
+    row('Project', data.project, 'Tower / Floor', `${data.tower} / ${data.floor}`);
+
+    // Amount, emphasized
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...GREY);
+    doc.text('Amount Received', labelX, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12.5);
+    doc.setTextColor(...GOLD);
+    doc.text(`Rs. ${formatINR(data.amount)}`, valueX, y);
+    y += rowH;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...GREY);
+    doc.text('Amount in Words', labelX, y);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(...INK);
+    const wordsLines = doc.splitTextToSize(data.amountWords, contentW - 42);
+    doc.text(wordsLines, valueX, y);
+    y += rowH * Math.max(1, wordsLines.length * 0.85);
+
+    doc.setFont('helvetica', 'normal');
+    row('Payment Mode', data.paymentMode);
+
+    // Payment-mode specific block
+    doc.setFillColor(...PALE);
+    let payBoxH = 18;
+    doc.roundedRect(margin, y - 2, contentW, payBoxH, 1.5, 1.5, 'F');
+    if (data.paymentMode === 'Cheque' || data.paymentMode === 'DD') {
+      row('Instrument No.', data.instrumentNo, 'Dated', formatDateDMY(data.instrumentDate));
+      row('Bank & Branch', data.bankBranch, 'IFSC Code', data.ifsc);
+      y += 2;
+    } else {
+      row('UTR No.', data.utrNo, 'Dated', formatDateDMY(data.transactionDate));
+      y += rowH + 2;
+    }
+
+    // ── Footer ──
+    const footerY = pageH - 34;
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.3);
+    doc.line(margin, footerY, pageW - margin, footerY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(...INK);
+    doc.text('For Golden Megastructures LLP', pageW - margin, footerY + 7, { align: 'right' });
+
+    if (data.requiresSignature) {
+      // High-value override: blank line for a physical countersignature instead of the e-receipt disclaimer.
+      doc.setDrawColor(...INK);
+      doc.setLineWidth(0.25);
+      doc.line(pageW - margin - 55, footerY + 14, pageW - margin, footerY + 14);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...GREY);
+      doc.text('Authorized Signatory', pageW - margin - 27.5, footerY + 18, { align: 'center' });
+    } else {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8);
+      doc.setTextColor(...GREY);
+      doc.text('This is an electronically generated receipt and does not require a stamp or signature.', pageW / 2, footerY + 14, { align: 'center' });
+    }
+
+    // ── Cancelled watermark (drawn last, on top of everything else) ──
+    if (data.cancelled) {
+      try {
+        doc.saveGraphicsState();
+        doc.setGState(new doc.GState({ opacity: 0.3 }));
+      } catch (e) { /* older jsPDF builds without GState support — falls through without transparency */ }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(54);
+      doc.setTextColor(200, 30, 30);
+      doc.text('CANCELLED', pageW / 2, pageH / 2, { align: 'center', angle: 35 });
+      try { doc.restoreGraphicsState(); } catch (e) { /* no-op if not supported */ }
+    }
+
+    doc.save(`Receipt_${data.serialNo}_${data.customerName.replace(/[^a-z0-9]+/gi, '')}${data.cancelled ? '_CANCELLED' : ''}.pdf`);
+  }
+</script>
+</body>
+</html>
