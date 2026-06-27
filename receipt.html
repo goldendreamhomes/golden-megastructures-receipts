@@ -321,16 +321,11 @@
 
         <div class="field">
           <label>Floor <span class="req">*</span></label>
-          <select id="fFloor" onchange="updateFlatNoPreview()"></select>
+          <select id="fFloor" onchange="populateFlatNoOptions()"></select>
         </div>
         <div class="field">
-          <label>Unit <span class="req">*</span></label>
-          <select id="fUnit" onchange="updateFlatNoPreview()"></select>
-        </div>
-
-        <div class="field full">
-          <label>Flat No. (auto)</label>
-          <div class="preview-box" id="flatNoPreview">—</div>
+          <label>Flat No. <span class="req">*</span> <span class="hint" id="flatNoHint" style="font-weight:400;">(confirmed bookings only)</span></label>
+          <select id="fFlatNo"></select>
         </div>
 
         <div class="field full">
@@ -481,6 +476,13 @@
   const COUNTER_PATH = { collection: 'receipt_meta', doc: 'counter' };
   const RECEIPTS_COLLECTION = 'receipts';
 
+  // Live booking-status board — same Firebase project/collection that booking.html
+  // writes to. Receipts can only be issued for flats marked "confirmed" there, so a
+  // receipt can never be generated for a flat nobody has actually booked yet. This
+  // collection already has a public-read security rule (set up for booking.html), so
+  // no Firestore rule changes are needed to read it from here.
+  const BOARD_PATH = { collection: 'booking_boards', doc: 'wingB' };
+
   // ── Extensible lookup lists — add to these any time ──
   const PROJECTS = ["Golden Legacy"];
   const TOWERS = ["B"];
@@ -496,6 +498,9 @@
   let receiptsCache = {};   // serialNo (string) -> stored data, from the recent-receipts listener / filter
   let logListenerStarted = false;
   let counterListenerStarted = false;
+  let boardListenerStarted = false;
+  let boardFlats = {};      // flat no. (string) -> { status, ... } from the live booking board
+  let boardDataLoaded = false;
 
   // ── Logo, preloaded once so jsPDF can embed it ──
   const logoImg = new Image();
@@ -548,11 +553,6 @@
     tower.innerHTML = '<option value="">— Select —</option>' +
       TOWERS.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
 
-    const unit = document.getElementById('fUnit');
-    let unitOpts = '<option value="">— Select —</option>';
-    for (let u = 1; u <= UNITS_PER_FLOOR; u++) unitOpts += `<option value="${u}">${u}</option>`;
-    unit.innerHTML = unitOpts;
-
     populateFloorOptions();
   }
 
@@ -563,7 +563,36 @@
     let opts = '<option value="">— Select —</option>';
     for (let f = 1; f <= count; f++) opts += `<option value="${f}">${f}</option>`;
     floorSel.innerHTML = opts;
-    updateFlatNoPreview();
+    populateFlatNoOptions();
+  }
+
+  // Populates the Flat No. dropdown for the currently selected floor, listing only
+  // flats whose live status on the booking board is "confirmed" — provisional holds
+  // and available flats are intentionally excluded, so a receipt can never be issued
+  // for a flat that isn't actually booked yet.
+  function populateFlatNoOptions() {
+    const floor = document.getElementById('fFloor').value;
+    const sel = document.getElementById('fFlatNo');
+    if (!floor) {
+      sel.innerHTML = '<option value="">— Select a floor first —</option>';
+      return;
+    }
+    if (!boardDataLoaded) {
+      sel.innerHTML = '<option value="">— Loading booking status… —</option>';
+      return;
+    }
+    const confirmedFlats = [];
+    for (let u = 1; u <= UNITS_PER_FLOOR; u++) {
+      const no = flatNo(floor, u);
+      const f = boardFlats[no];
+      if (f && f.status === 'confirmed') confirmedFlats.push(no);
+    }
+    if (confirmedFlats.length === 0) {
+      sel.innerHTML = '<option value="">— No confirmed bookings on this floor —</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">— Select —</option>' +
+      confirmedFlats.map(no => `<option value="${esc(no)}">${esc(no)}</option>`).join('');
   }
 
   function setDefaultDate() {
@@ -613,6 +642,7 @@
       pill.classList.remove('hidden');
       startCounterListener();
       startLogListener();
+      startBoardListener();
     }).catch(e => {
       console.error(e);
       errEl.textContent = 'Could not connect — check your internet connection and try again.';
@@ -648,6 +678,24 @@
     }, err => {
       console.error('Counter listener failed', err);
       document.getElementById('nextSerialPreview').textContent = '—';
+    });
+  }
+
+  /* ════════════════════════════════════════════════════════
+     LIVE BOOKING-STATUS BOARD (read-only, drives the Flat No. dropdown)
+     ════════════════════════════════════════════════════════ */
+  function startBoardListener() {
+    if (boardListenerStarted) return;
+    boardListenerStarted = true;
+    db.collection(BOARD_PATH.collection).doc(BOARD_PATH.doc).onSnapshot(snap => {
+      boardFlats = (snap.exists && snap.data().flats) ? snap.data().flats : {};
+      boardDataLoaded = true;
+      // Refresh whatever floor is currently selected, in case a booking's status
+      // changed (e.g. just got confirmed, or got cancelled) while the form was open.
+      populateFlatNoOptions();
+    }, err => {
+      console.error('Booking board listener failed', err);
+      boardDataLoaded = false;
     });
   }
 
@@ -827,8 +875,15 @@
     document.getElementById('fTower').value = data.tower || '';
     populateFloorOptions();
     document.getElementById('fFloor').value = data.floor || '';
-    document.getElementById('fUnit').value = data.unit || '';
-    updateFlatNoPreview();
+    populateFlatNoOptions();
+    const flatSel = document.getElementById('fFlatNo');
+    // The flat being reissued was, by definition, already booked. But if the live
+    // booking board hasn't loaded yet, or its status has since changed, make sure the
+    // option still exists so a corrective reissue is never blocked by board data.
+    if (data.flatNo && !Array.from(flatSel.options).some(o => o.value === data.flatNo)) {
+      flatSel.insertAdjacentHTML('beforeend', `<option value="${esc(data.flatNo)}">${esc(data.flatNo)}</option>`);
+    }
+    flatSel.value = data.flatNo || '';
     document.getElementById('fPaymentMode').value = data.paymentMode || '';
     togglePaymentFields();
     document.getElementById('fInstrumentNo').value = data.instrumentNo || '';
@@ -925,13 +980,6 @@
     el.textContent = (!isNaN(val) && val > 0) ? amountInWords(val) : '—';
   }
 
-  function updateFlatNoPreview() {
-    const floor = document.getElementById('fFloor').value;
-    const unit = document.getElementById('fUnit').value;
-    const el = document.getElementById('flatNoPreview');
-    el.textContent = (floor && unit) ? flatNo(floor, unit) : '—';
-  }
-
   function togglePaymentFields() {
     const mode = document.getElementById('fPaymentMode').value;
     const instrBlock = document.getElementById('instrumentFields');
@@ -971,7 +1019,6 @@
     document.getElementById('fProject').value = '';
     document.getElementById('fTower').value = '';
     populateFloorOptions();
-    document.getElementById('fUnit').value = '';
     document.getElementById('fPaymentMode').value = '';
     document.getElementById('fInstrumentNo').value = '';
     document.getElementById('fInstrumentDate').value = '';
@@ -984,7 +1031,6 @@
     setDefaultDate();
     togglePaymentFields();
     updateAmountWordsPreview();
-    updateFlatNoPreview();
     document.getElementById('formErr').style.display = 'none';
   }
 
@@ -1010,7 +1056,7 @@
     const project = document.getElementById('fProject').value;
     const tower = document.getElementById('fTower').value;
     const floor = document.getElementById('fFloor').value;
-    const unit = document.getElementById('fUnit').value;
+    const flatNoSelected = document.getElementById('fFlatNo').value;
     const paymentMode = document.getElementById('fPaymentMode').value;
     const requiresSignature = document.getElementById('fRequireSignature').checked;
 
@@ -1022,7 +1068,7 @@
     if (!project) return fail('Project is required.');
     if (!tower) return fail('Tower is required.');
     if (!floor) return fail('Floor is required.');
-    if (!unit) return fail('Unit is required.');
+    if (!flatNoSelected) return fail('Flat No. is required.');
     if (!paymentMode) return fail('Payment Mode is required.');
 
     const data = {
@@ -1031,8 +1077,8 @@
       amount,
       amountWords: amountInWords(amount),
       project, tower,
-      floor: Number(floor), unit: Number(unit),
-      flatNo: flatNo(floor, unit),
+      floor: Number(floor),
+      flatNo: flatNoSelected,
       paymentMode,
       requiresSignature,
       issuedBy: currentAccountant || ''
@@ -1257,18 +1303,23 @@
     doc.setFont('helvetica', 'normal');
     row('Payment Mode', data.paymentMode);
 
-    // Payment-mode specific block
+    // Payment-mode specific block — box height/position is computed from the actual
+    // number of rows (2 for Cheque/DD, 1 for electronic modes), with enough top padding
+    // to clear the first row's cap-height and enough bottom padding below the last
+    // row's baseline, so the text always stays fully inside the tinted box.
+    const isInstrumentMode = (data.paymentMode === 'Cheque' || data.paymentMode === 'DD');
+    const payRows = isInstrumentMode ? 2 : 1;
+    const payTopPad = 5, payBottomPad = 4;
+    const payBoxH = (payRows - 1) * rowH + payTopPad + payBottomPad;
     doc.setFillColor(...PALE);
-    let payBoxH = 18;
-    doc.roundedRect(margin, y - 2, contentW, payBoxH, 1.5, 1.5, 'F');
-    if (data.paymentMode === 'Cheque' || data.paymentMode === 'DD') {
+    doc.roundedRect(margin, y - payTopPad, contentW, payBoxH, 1.5, 1.5, 'F');
+    if (isInstrumentMode) {
       row('Instrument No.', data.instrumentNo, 'Dated', formatDateDMY(data.instrumentDate));
       row('Bank & Branch', data.bankBranch, 'IFSC Code', data.ifsc);
-      y += 2;
     } else {
       row('UTR No.', data.utrNo, 'Dated', formatDateDMY(data.transactionDate));
-      y += rowH + 2;
     }
+    y += payBottomPad;
 
     // ── Footer ──
     const footerY = pageH - 34;
