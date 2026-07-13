@@ -355,10 +355,6 @@
             <label>Bank &amp; Branch <span class="req">*</span></label>
             <input type="text" id="fBankBranch" placeholder="e.g. HDFC Bank, Nagpur Main">
           </div>
-          <div class="field">
-            <label>IFSC Code <span class="req">*</span></label>
-            <input type="text" id="fIfsc" maxlength="11" placeholder="e.g. HDFC0001234" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
-          </div>
         </div>
 
         <!-- NEFT/RTGS/IMPS/UPI fields -->
@@ -452,7 +448,7 @@
   // gets stamped with "Issued By" using the selected name, for traceability.
   // ⚠️ Replace these placeholder names/passwords with your real accountants before going live.
   const ACCOUNTANTS = [
-    { name: "Atul Thakre", password: "2026_GL_GML" },
+    { name: "Atul Thakre", password: "Receipt2026" },
     { name: "Accountant 2", password: "GoldenReceipt2027" }
   ];
 
@@ -889,7 +885,6 @@
     document.getElementById('fInstrumentNo').value = data.instrumentNo || '';
     document.getElementById('fInstrumentDate').value = data.instrumentDate || '';
     document.getElementById('fBankBranch').value = data.bankBranch || '';
-    document.getElementById('fIfsc').value = data.ifsc || '';
     document.getElementById('fUtrNo').value = data.utrNo || '';
     document.getElementById('fTxnDate').value = data.transactionDate || '';
     document.getElementById('fRequireSignature').checked = !!data.requiresSignature;
@@ -956,7 +951,6 @@
   const PAN_RE = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/;
   const PHONE_RE = /^[0-9]{10}$/;
   const INSTR_RE = /^[0-9]{6}$/;
-  const IFSC_RE = /^[A-Za-z]{4}0[A-Za-z0-9]{6}$/;
 
   // UTR / reference-number rules vary by electronic payment mode:
   //   UPI / IMPS — 12 digits, numbers only
@@ -1023,7 +1017,6 @@
     document.getElementById('fInstrumentNo').value = '';
     document.getElementById('fInstrumentDate').value = '';
     document.getElementById('fBankBranch').value = '';
-    document.getElementById('fIfsc').value = '';
     document.getElementById('fUtrNo').value = '';
     document.getElementById('fTxnDate').value = '';
     document.getElementById('fRequireSignature').checked = false;
@@ -1089,12 +1082,10 @@
       const instrumentNo = document.getElementById('fInstrumentNo').value.trim();
       const instrumentDate = document.getElementById('fInstrumentDate').value;
       const bankBranch = document.getElementById('fBankBranch').value.trim();
-      const ifsc = document.getElementById('fIfsc').value.trim();
       if (!INSTR_RE.test(instrumentNo)) return fail('Instrument No. must be exactly 6 digits.');
       if (!instrumentDate) return fail('Instrument Dated is required.');
       if (!bankBranch) return fail('Bank & Branch is required.');
-      if (!IFSC_RE.test(ifsc)) return fail('IFSC Code format is invalid. Expected format: 4 letters + "0" + 6 alphanumeric (e.g. HDFC0001234).');
-      Object.assign(data, { instrumentNo, instrumentDate, bankBranch, ifsc });
+      Object.assign(data, { instrumentNo, instrumentDate, bankBranch });
     } else {
       const utrNo = document.getElementById('fUtrNo').value.trim();
       const txnDate = document.getElementById('fTxnDate').value;
@@ -1315,7 +1306,7 @@
     doc.roundedRect(margin, y - payTopPad, contentW, payBoxH, 1.5, 1.5, 'F');
     if (isInstrumentMode) {
       row('Instrument No.', data.instrumentNo, 'Dated', formatDateDMY(data.instrumentDate));
-      row('Bank & Branch', data.bankBranch, 'IFSC Code', data.ifsc);
+      row('Bank & Branch', data.bankBranch);
     } else {
       row('UTR No.', data.utrNo, 'Dated', formatDateDMY(data.transactionDate));
     }
