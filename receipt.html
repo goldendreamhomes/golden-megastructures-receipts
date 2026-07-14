@@ -338,6 +338,8 @@
             <option value="RTGS">RTGS</option>
             <option value="IMPS">IMPS</option>
             <option value="UPI">UPI</option>
+            <option value="Internal Bank Transfer">Internal Bank Transfer</option>
+            <option value="SBI to SBI Transfer">SBI to SBI Transfer</option>
           </select>
         </div>
 
@@ -360,7 +362,7 @@
         <!-- NEFT/RTGS/IMPS/UPI fields -->
         <div class="payblock hidden" id="electronicFields">
           <div class="field">
-            <label>UTR No. <span class="req">*</span> <span class="hint" id="utrHint"></span></label>
+            <label><span id="utrLabel">UTR No.</span> <span class="req">*</span> <span class="hint" id="utrHint"></span></label>
             <input type="text" id="fUtrNo" oninput="handleUtrInput()">
           </div>
           <div class="field">
@@ -467,7 +469,7 @@
   // accountants. A yellow "TEST MODE" badge and banner appear in the app as a reminder.
   // Set this to false for live/production use — receipts then get real, sequential
   // serial numbers and the counter advances normally (i.e. user-testing is not being done).
-  const TEST_MODE = true;
+  const TEST_MODE = false;
 
   const COUNTER_PATH = { collection: 'receipt_meta', doc: 'counter' };
   const RECEIPTS_COLLECTION = 'receipts';
@@ -960,7 +962,19 @@
     UPI:  { length: 12, re: /^[0-9]{12}$/,       numericOnly: true,  label: '12 digits (numbers only)' },
     IMPS: { length: 12, re: /^[0-9]{12}$/,       numericOnly: true,  label: '12 digits (numbers only)' },
     NEFT: { length: 16, re: /^[A-Za-z0-9]{16}$/, numericOnly: false, label: '16 alphanumeric characters' },
-    RTGS: { length: 22, re: /^[A-Za-z0-9]{22}$/, numericOnly: false, label: '22 alphanumeric characters' }
+    RTGS: { length: 22, re: /^[A-Za-z0-9]{22}$/, numericOnly: false, label: '22 alphanumeric characters' },
+    'Internal Bank Transfer': {
+      length: 25, re: /^[A-Za-z0-9]{25}$/, numericOnly: false,
+      label: 'exactly 25 alphanumeric characters',
+      fieldLabel: 'Transaction Ref. No.',
+      placeholder: '25-character transaction reference'
+    },
+    'SBI to SBI Transfer': {
+      length: 4, re: /^[0-9]{4}$/, numericOnly: true,
+      label: 'last 4 digits of account number (will appear as XXXXXXX + 4 digits in the receipt)',
+      fieldLabel: 'Last 4 Digits of A/C No.',
+      placeholder: 'e.g. 1234'
+    }
   };
 
   function flatNo(floor, unit) { return `${floor}${String(unit).padStart(2, '0')}`; }
@@ -987,9 +1001,13 @@
       const rule = UTR_RULES[mode];
       const utrEl = document.getElementById('fUtrNo');
       utrEl.maxLength = rule.length;
-      utrEl.placeholder = `${rule.length}-character ${mode} ${rule.numericOnly ? 'reference no.' : 'UTR'}`;
+      utrEl.placeholder = rule.placeholder || `${rule.length}-character ${mode} ${rule.numericOnly ? 'reference no.' : 'UTR'}`;
+      document.getElementById('utrLabel').textContent = rule.fieldLabel || 'UTR No.';
       document.getElementById('utrHint').textContent = `(${rule.label})`;
       handleUtrInput(); // re-sanitize any existing value to match the newly selected mode's rules
+    } else {
+      document.getElementById('utrLabel').textContent = 'UTR No.';
+      document.getElementById('utrHint').textContent = '';
     }
   }
 
@@ -1091,7 +1109,8 @@
       const txnDate = document.getElementById('fTxnDate').value;
       const utrRule = UTR_RULES[paymentMode];
       if (!utrRule || !utrRule.re.test(utrNo)) {
-        return fail(`UTR No. for ${paymentMode} must be ${utrRule ? utrRule.label : 'in the correct format'}.`);
+        const fieldName = utrRule ? (utrRule.fieldLabel || 'UTR No.') : 'Reference No.';
+        return fail(`${fieldName} for ${paymentMode} must be ${utrRule ? utrRule.label : 'in the correct format'}.`);
       }
       if (!txnDate) return fail('Transaction Dated is required.');
       Object.assign(data, { utrNo, transactionDate: txnDate });
@@ -1307,6 +1326,10 @@
     if (isInstrumentMode) {
       row('Instrument No.', data.instrumentNo, 'Dated', formatDateDMY(data.instrumentDate));
       row('Bank & Branch', data.bankBranch);
+    } else if (data.paymentMode === 'SBI to SBI Transfer') {
+      row('Account No.', 'XXXXXXX' + (data.utrNo || ''), 'Dated', formatDateDMY(data.transactionDate));
+    } else if (data.paymentMode === 'Internal Bank Transfer') {
+      row('Transaction Ref.', data.utrNo, 'Dated', formatDateDMY(data.transactionDate));
     } else {
       row('UTR No.', data.utrNo, 'Dated', formatDateDMY(data.transactionDate));
     }
